@@ -88,7 +88,7 @@ public class Worker : BackgroundService
 
         foreach (var monitor in monitors)
         {
-            var probe = monitor.Tags.Where(w => w.Name == "Probe").Select(s => s.Value).FirstOrDefault() == _appSettings.ProbeName;
+            var probe = monitor.Tags.Where(w => w.Name == "Probe").Select(s => s.Value).Contains(_appSettings.ProbeName);
 
             if (probe)
             {
@@ -102,7 +102,7 @@ public class Worker : BackgroundService
                     Type = monitor.Tags.Where(w => w.Name == "Type").Select(s => s.Value).First(),
                     Destination = monitor.Tags.Where(w => w.Name == "Address").Select(s => s.Value).FirstOrDefault() ?? string.Empty,
                     Timeout = 1000,
-                    PushUri = new Uri($"{_appSettings.Url}api/push/{monitor.PushToken}?status=up&msg=OK&ping="),
+                    PushUri = new Uri($"{_appSettings.Url}api/push/{monitor.PushToken}?status=up&msg=OK_From_{_appSettings.ProbeName}&ping="),
                     Keyword = monitor.Tags.Where(w => w.Name == "Keyword").Select(s => s.Value).FirstOrDefault() ?? string.Empty,
                     Method = monitor.Tags.Where(w => w.Name == "Method").Select(s => s.Value).FirstOrDefault(),
                     Brand = monitor.Tags.Where(w => w.Name == "Brand").Select(s => s.Value).FirstOrDefault() ?? string.Empty,
