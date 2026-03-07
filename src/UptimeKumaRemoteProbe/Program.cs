@@ -1,6 +1,10 @@
 var builder = Host.CreateApplicationBuilder(args);
 
-builder.AddServiceDefaults();
+
+builder.Logging.AddSimpleConsole(options =>
+{
+    options.TimestampFormat = "yyyy-MM-dd HH:mm:ss ";
+});
 builder.Services.AddHttpClient("Default");
 builder.Services.AddHttpClient("IgnoreSSL")
 .ConfigurePrimaryHttpMessageHandler(() =>

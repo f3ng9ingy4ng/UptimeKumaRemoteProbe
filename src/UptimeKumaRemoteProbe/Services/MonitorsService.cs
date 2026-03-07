@@ -17,7 +17,8 @@ public class MonitorsService
         {
             using var socket = new SocketIOClient.SocketIO(_appSettings.Url, new SocketIOClient.SocketIOOptions
             {
-                ReconnectionAttempts = 3
+                ReconnectionAttempts = 3,
+                ConnectionTimeout = TimeSpan.FromSeconds(15)
             });
 
             var data = new
@@ -46,8 +47,7 @@ public class MonitorsService
                 }, data);
             };
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-            await socket.ConnectAsync(cts.Token);
+            await socket.ConnectAsync();
 
             int round = 0;
             while (monitorsRaw.ValueKind == JsonValueKind.Undefined)

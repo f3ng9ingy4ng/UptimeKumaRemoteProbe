@@ -1,8 +1,4 @@
 <Solution>
-  <Folder Name="/Aspire/">
-    <Project Path="src/UKRP.AppHost/UKRP.AppHost.csproj" />
-    <Project Path="src/UKRP.ServiceDefaults/UKRP.ServiceDefaults.csproj" />
-  </Folder>
   <Folder Name="/Solution Items/">
     <File Path=".github/workflows/codeql-analysis.yml" />
     <File Path=".github/workflows/dotnet.yml" />
