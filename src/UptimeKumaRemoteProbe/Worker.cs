@@ -47,36 +47,44 @@ public class Worker : BackgroundService
             Environment.Exit(0);
         }
 
-        Ping ping = new();
-        PingReply pingReply = null;
-
         while (!stoppingToken.IsCancellationRequested)
         {
-            if (_appSettings.UpDependency != "")
+            try
             {
-                try
+                PingReply pingReply = null;
+
+                if (_appSettings.UpDependency != "")
                 {
-                    pingReply = ping.Send(_appSettings.UpDependency, _appSettings.Timeout);
+                    try
+                    {
+                        using Ping ping = new();
+                        pingReply = ping.Send(_appSettings.UpDependency, _appSettings.Timeout);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError("Network is unreachable. {ex}", ex.Message);
+                    }
                 }
-                catch (Exception ex)
+
+                if (pingReply?.Status == IPStatus.Success)
                 {
-                    _logger.LogError("Network is unreachable. {ex}", ex.Message);
+                    var monitors = await _monitorsService.GetMonitorsAsync();
+                    if (monitors is not null)
+                    {
+                        var endpoints = ParseEndpoints(monitors);
+                        await LoopAsync(endpoints);
+                    }
                 }
+                else
+                {
+                    _logger.LogError("Up Dependency is unreachable.");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Unexpected error in main loop: {ex}", ex.Message);
             }
 
-            if (pingReply?.Status == IPStatus.Success)
-            {
-                var monitors = await _monitorsService.GetMonitorsAsync();
-                if (monitors is not null)
-                {
-                    var endpoints = ParseEndpoints(monitors);
-                    await LoopAsync(endpoints);
-                }
-            }
-            else
-            {
-                _logger.LogError("Up Dependency is unreachable.");
-            }
             await Task.Delay(_appSettings.Delay, stoppingToken);
         }
     }

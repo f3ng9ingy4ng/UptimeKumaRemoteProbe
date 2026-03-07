@@ -1,4 +1,4 @@
-﻿namespace UptimeKumaRemoteProbe.Services;
+namespace UptimeKumaRemoteProbe.Services;
 
 public class MonitorsService
 {
@@ -46,7 +46,8 @@ public class MonitorsService
                 }, data);
             };
 
-            await socket.ConnectAsync();
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            await socket.ConnectAsync(cts.Token);
 
             int round = 0;
             while (monitorsRaw.ValueKind == JsonValueKind.Undefined)
