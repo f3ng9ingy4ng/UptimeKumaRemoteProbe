@@ -24,7 +24,7 @@ builder.Services.AddSingleton<MonitorsService>();
 builder.Services.AddSingleton<DomainService>();
 builder.Services.AddHostedService<Worker>().Configure<HostOptions>(options =>
 {
-    options.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore;
+    options.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.StopHost;
 });
 builder.Services.RemoveAll<IHttpMessageHandlerBuilderFilter>(); //Disable HttpClient Logging
 builder.Services.AddHealthChecks().AddCheck("HealthCheck", () => HealthCheckResult.Healthy());

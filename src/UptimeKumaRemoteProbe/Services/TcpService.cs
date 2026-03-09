@@ -1,4 +1,4 @@
-﻿namespace UptimeKumaRemoteProbe.Services;
+namespace UptimeKumaRemoteProbe.Services;
 
 public class TcpService
 {
@@ -19,7 +19,8 @@ public class TcpService
 
         try
         {
-            await tcpClient.ConnectAsync(endpoint.Destination, endpoint.Port);
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            await tcpClient.ConnectAsync(endpoint.Destination, endpoint.Port, cts.Token);
         }
         catch
         {

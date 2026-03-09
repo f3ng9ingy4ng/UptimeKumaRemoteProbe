@@ -14,6 +14,7 @@ public class Worker : BackgroundService
     private readonly DomainService _domainService;
     private readonly VersionService _versionService;
     private static DateOnly lastDailyExecution;
+    private long _loopCount = 0;
 
     public Worker(ILogger<Worker> logger, IConfiguration configuration, AppSettings appSettings, PingService pingService, HttpService httpService,
         TcpService tcpService, CertificateService certificateService, DbService dbService, MonitorsService monitorsService,
@@ -49,6 +50,9 @@ public class Worker : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            _loopCount++;
+            _logger.LogDebug("--- Loop #{count} start ---", _loopCount);
+
             try
             {
                 PingReply pingReply = null;
@@ -59,6 +63,8 @@ public class Worker : BackgroundService
                     {
                         using Ping ping = new();
                         pingReply = ping.Send(_appSettings.UpDependency, _appSettings.Timeout);
+                        _logger.LogDebug("UpDependency ping {target}: {status} ({ms}ms)",
+                            _appSettings.UpDependency, pingReply?.Status, pingReply?.RoundtripTime);
                     }
                     catch (Exception ex)
                     {
@@ -72,7 +78,12 @@ public class Worker : BackgroundService
                     if (monitors is not null)
                     {
                         var endpoints = ParseEndpoints(monitors);
+                        _logger.LogDebug("Parsed {count} endpoints to check", endpoints.Count);
                         await LoopAsync(endpoints);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("GetMonitorsAsync returned null, skipping this loop");
                     }
                 }
                 else
@@ -82,9 +93,10 @@ public class Worker : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError("Unexpected error in main loop: {ex}", ex.Message);
+                _logger.LogError(ex, "Unexpected error in main loop #{count}", _loopCount);
             }
 
+            _logger.LogDebug("--- Loop #{count} end, next in {delay}ms ---", _loopCount, _appSettings.Delay);
             await Task.Delay(_appSettings.Delay, stoppingToken);
         }
     }
@@ -135,30 +147,37 @@ public class Worker : BackgroundService
     {
         foreach (var item in endpoints)
         {
-            switch (item.Type)
+            try
             {
-                case "Ping":
-                    await _pingService.CheckPingAsync(item);
-                    break;
-                case "Http":
-                    await _httpService.CheckHttpAsync(item);
-                    break;
-                case "Tcp":
-                    await _tcpService.CheckTcpAsync(item);
-                    break;
-                case "Certificate":
-                    await _certificateService.CheckCertificateAsync(item);
-                    break;
-                case "Database":
-                    item.ConnectionString = $"{_configurations.ConnectionStrings}.{item.Brand}";
-                    await _dbService.CheckDbAsync(item);
-                    break;
-                case "Domain":
-                    if (await CheckDailyExecutionAsync()) break;
-                    await _domainService.CheckDomainAsync(item);
-                    break;
-                default:
-                    break;
+                switch (item.Type)
+                {
+                    case "Ping":
+                        await _pingService.CheckPingAsync(item);
+                        break;
+                    case "Http":
+                        await _httpService.CheckHttpAsync(item);
+                        break;
+                    case "Tcp":
+                        await _tcpService.CheckTcpAsync(item);
+                        break;
+                    case "Certificate":
+                        await _certificateService.CheckCertificateAsync(item);
+                        break;
+                    case "Database":
+                        item.ConnectionString = $"{_configurations.ConnectionStrings}.{item.Brand}";
+                        await _dbService.CheckDbAsync(item);
+                        break;
+                    case "Domain":
+                        if (await CheckDailyExecutionAsync()) break;
+                        await _domainService.CheckDomainAsync(item);
+                        break;
+                    default:
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking {type} endpoint {destination}", item.Type, item.Destination);
             }
         }
     }

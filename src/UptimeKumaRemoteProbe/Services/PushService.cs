@@ -1,4 +1,4 @@
-﻿namespace UptimeKumaRemoteProbe.Services;
+namespace UptimeKumaRemoteProbe.Services;
 
 public class PushService
 {
@@ -17,7 +17,13 @@ public class PushService
     {
         try
         {
-            await _httpClient.GetAsync($"{uri}{elapsedMilliseconds}");
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            await _httpClient.GetAsync($"{uri}{elapsedMilliseconds}", cts.Token);
+            _logger.LogDebug("Push: {uri} ({ms}ms)", uri, elapsedMilliseconds);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogError("Push timed out after 15s: {uri}", uri);
         }
         catch
         {

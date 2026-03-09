@@ -1,4 +1,4 @@
-﻿namespace UptimeKumaRemoteProbe.Services;
+namespace UptimeKumaRemoteProbe.Services;
 
 public class CertificateService
 {
@@ -33,7 +33,8 @@ public class CertificateService
 
         try
         {
-            var result = await _httpClient.SendAsync(new HttpRequestMessage(new HttpMethod(endpoint.Method ?? "Head"), endpoint.Destination));
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            var result = await _httpClient.SendAsync(new HttpRequestMessage(new HttpMethod(endpoint.Method ?? "Head"), endpoint.Destination), cts.Token);
 
             if (notAfter >= DateTime.UtcNow.AddDays(endpoint.CertificateExpiration))
             {

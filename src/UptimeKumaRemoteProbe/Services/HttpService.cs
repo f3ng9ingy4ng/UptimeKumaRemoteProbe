@@ -1,4 +1,4 @@
-﻿namespace UptimeKumaRemoteProbe.Services;
+namespace UptimeKumaRemoteProbe.Services;
 
 public class HttpService
 {
@@ -27,7 +27,8 @@ public class HttpService
 
         try
         {
-            result = await _httpClient.GetAsync(endpoint.Destination);
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            result = await _httpClient.GetAsync(endpoint.Destination, cts.Token);
             content = await result.Content.ReadAsStringAsync();
 
             _logger.LogInformation("Http: {endpoint.Destination} {result.StatusCode}",
