@@ -145,7 +145,12 @@ public class Worker : BackgroundService
 
     private async Task LoopAsync(List<Endpoint> endpoints)
     {
-        foreach (var item in endpoints)
+        var options = new ParallelOptions
+        {
+            MaxDegreeOfParallelism = Environment.ProcessorCount * 2
+        };
+
+        await Parallel.ForEachAsync(endpoints, options, async (item, token) =>
         {
             try
             {
@@ -179,7 +184,7 @@ public class Worker : BackgroundService
             {
                 _logger.LogError(ex, "Error checking {type} endpoint {destination}", item.Type, item.Destination);
             }
-        }
+        });
     }
 
     private static async Task<bool> CheckDailyExecutionAsync()

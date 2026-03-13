@@ -15,12 +15,12 @@ public class TcpService
     {
         var stopwatch = Stopwatch.StartNew();
 
-        TcpClient tcpClient = new();
+        using TcpClient tcpClient = new();
 
         try
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-            await tcpClient.ConnectAsync(endpoint.Destination, endpoint.Port, cts.Token);
+            await tcpClient.ConnectAsync(endpoint.Destination, endpoint.Port).WaitAsync(cts.Token);
         }
         catch
         {
@@ -33,7 +33,5 @@ public class TcpService
         }
         _logger.LogInformation("Tcp: {endpoint.Destination}:{endpoint.Port} Success={tcpClient.Connected}",
             endpoint.Destination, endpoint.Port, tcpClient.Connected);
-
-        tcpClient.Dispose();
     }
 }

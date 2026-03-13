@@ -16,7 +16,7 @@ public class MonitorsService
         SocketIOClient.SocketIO socket = null;
         try
         {
-            socket = new SocketIOClient.SocketIO(_appSettings.Url, new SocketIOClient.SocketIOOptions
+            socket = new SocketIOClient.SocketIO(new Uri(_appSettings.Url), new SocketIOClient.SocketIOOptions
             {
                 ReconnectionAttempts = 3,
                 ConnectionTimeout = TimeSpan.FromSeconds(15)
@@ -34,16 +34,18 @@ public class MonitorsService
 
             socket.On("monitorList", response =>
             {
-                monitorsRaw = response.GetValue<JsonElement>();
+                monitorsRaw = response.GetValue<JsonElement>(0);
                 _logger.LogDebug("Received monitorList event from server");
+                return Task.CompletedTask;
             });
 
             socket.OnConnected += async (sender, e) =>
             {
                 _logger.LogInformation("SocketIO connected to {url}", _appSettings.Url);
-                await socket.EmitAsync("login", (ack) =>
+                
+                Func<SocketIOClient.Common.Messages.IDataMessage, Task> ack = response => 
                 {
-                    var result = JsonNode.Parse(ack.GetValue<JsonElement>(0).ToString());
+                    var result = JsonNode.Parse(response.GetValue<JsonElement>(0).ToString());
                     if (result["ok"].ToString() != "true")
                     {
                         _logger.LogError("Uptime Kuma login failure, response: {result}", result.ToString());
@@ -53,7 +55,10 @@ public class MonitorsService
                         loginSuccess = true;
                         _logger.LogDebug("Uptime Kuma login success");
                     }
-                }, data);
+                    return Task.CompletedTask;
+                };
+                
+                await socket.EmitAsync("login", Enumerable.Repeat<object>(data, 1), ack);
             };
 
             socket.OnDisconnected += (sender, e) =>
@@ -68,9 +73,8 @@ public class MonitorsService
 
             _logger.LogDebug("SocketIO connecting to {url}...", _appSettings.Url);
 
-            // ConnectAsync with 30s timeout
-            using var connectCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            await socket.ConnectAsync(connectCts.Token);
+            // ConnectAsync with options Configuration Timeout 15s
+            await socket.ConnectAsync();
 
             // Wait for monitorList data, max 10 seconds
             int round = 0;

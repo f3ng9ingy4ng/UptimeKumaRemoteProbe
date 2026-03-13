@@ -1,3 +1,6 @@
+using Polly;
+using Polly.Extensions.Http;
+
 var builder = Host.CreateApplicationBuilder(args);
 
 
@@ -5,15 +8,29 @@ builder.Logging.AddSimpleConsole(options =>
 {
     options.TimestampFormat = "yyyy-MM-dd HH:mm:ss ";
 });
-builder.Services.AddHttpClient("Default");
-builder.Services.AddHttpClient("IgnoreSSL")
-.ConfigurePrimaryHttpMessageHandler(() =>
+
+static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy()
 {
-    return new HttpClientHandler
+    return HttpPolicyExtensions
+        .HandleTransientHttpError()
+        .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
+}
+
+builder.Services.AddHttpClient("Default")
+    .AddPolicyHandler(GetRetryPolicy());
+
+builder.Services.AddHttpClient("IgnoreSSL")
+    .ConfigurePrimaryHttpMessageHandler(() =>
     {
-        ServerCertificateCustomValidationCallback = (m, c, ch, e) => true
-    };
-});
+        return new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = (m, c, ch, e) => true
+        };
+    })
+    .AddPolicyHandler(GetRetryPolicy());
+
+builder.Services.AddHttpClient("CertificateCheck")
+    .AddPolicyHandler(GetRetryPolicy());
 builder.Services.AddSingleton<PingService>();
 builder.Services.AddSingleton<HttpService>();
 builder.Services.AddSingleton<TcpService>();
