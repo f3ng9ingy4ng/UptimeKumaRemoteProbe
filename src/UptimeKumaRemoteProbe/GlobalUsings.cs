@@ -1,12 +1,16 @@
-﻿global using Microsoft.EntityFrameworkCore;
+global using Microsoft.EntityFrameworkCore;
 global using Microsoft.Extensions.DependencyInjection.Extensions;
 global using Microsoft.Extensions.Diagnostics.HealthChecks;
 global using Microsoft.Extensions.Http;
+global using Microsoft.Extensions.Options;
 global using System.Diagnostics;
 global using System.Globalization;
+global using System.Net.Http;
 global using System.Net.NetworkInformation;
 global using System.Net.Sockets;
 global using System.Reflection;
+global using System.Security.Cryptography;
+global using System.Text;
 global using System.Text.Json;
 global using System.Text.Json.Nodes;
 global using System.Text.Json.Serialization;

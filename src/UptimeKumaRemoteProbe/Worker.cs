@@ -120,8 +120,8 @@ public class Worker : BackgroundService
                 var endpoint = new Endpoint
                 {
                     Type = monitor.Tags.Where(w => w.Name == "Type").Select(s => s.Value).First(),
-                    Destination = monitor.Tags.Where(w => w.Name == "Address").Select(s => s.Value).FirstOrDefault() ?? string.Empty,
-                    Timeout = 1000,
+                    Destinations = monitor.Tags.Where(w => w.Name == "Address").Select(s => s.Value).ToList(),
+                    Timeout = int.Parse(monitor.Tags.Where(w => w.Name == "Timeout").Select(s => s.Value).FirstOrDefault() ?? "1000"),
                     PushUri = new Uri($"{_appSettings.Url}api/push/{monitor.PushToken}?status=up&msg=OK_From_{_appSettings.ProbeName}&ping="),
                     Keyword = monitor.Tags.Where(w => w.Name == "Keyword").Select(s => s.Value).FirstOrDefault() ?? string.Empty,
                     Method = monitor.Tags.Where(w => w.Name == "Method").Select(s => s.Value).FirstOrDefault(),
@@ -182,7 +182,7 @@ public class Worker : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error checking {type} endpoint {destination}", item.Type, item.Destination);
+                _logger.LogError(ex, "Error checking {type} endpoint {destination}", item.Type, item.Destinations.FirstOrDefault());
             }
         });
     }

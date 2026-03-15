@@ -16,29 +16,43 @@ public class HttpService
     public async Task CheckHttpAsync(Endpoint endpoint)
     {
         var httpClient = _httpClientFactory.CreateClient(endpoint.IgnoreSSL ? "IgnoreSSL" : "Default");
-
         var stopwatch = Stopwatch.StartNew();
 
-        try
+        var destinations = endpoint.Destinations;
+
+        bool anySuccess = false;
+
+        foreach (var destination in destinations)
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            using var result = await httpClient.GetAsync(endpoint.Destination, cts.Token);
-            var content = await result.Content.ReadAsStringAsync(cts.Token);
-
-            _logger.LogInformation("Http: {endpoint.Destination} {result.StatusCode}",
-                endpoint.Destination, result.StatusCode);
-
-            if (endpoint.Keyword != "" && !content.Contains(endpoint.Keyword)) throw new ArgumentNullException(nameof(endpoint), "Keyword not found.");
-            
-            if (result.IsSuccessStatusCode)
+            try
             {
-                await _pushService.PushAsync(endpoint.PushUri, stopwatch.ElapsedMilliseconds);
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                using var result = await httpClient.GetAsync(destination, cts.Token);
+                var content = await result.Content.ReadAsStringAsync(cts.Token);
+
+                _logger.LogInformation("Http: {destination} {statusCode}", destination, result.StatusCode);
+
+                if (result.IsSuccessStatusCode)
+                {
+                    if (endpoint.Keyword != "" && !content.Contains(endpoint.Keyword))
+                    {
+                        _logger.LogWarning("Keyword '{keyword}' not found in content for {destination}", endpoint.Keyword, destination);
+                        continue;
+                    }
+
+                    anySuccess = true;
+                    break;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error trying to get {destination}", destination);
             }
         }
-        catch
+
+        if (anySuccess)
         {
-            _logger.LogError("Error trying get {endpoint.Destination}", endpoint.Destination);
-            return;
+            await _pushService.PushAsync(endpoint.PushUri, stopwatch.ElapsedMilliseconds);
         }
     }
 }

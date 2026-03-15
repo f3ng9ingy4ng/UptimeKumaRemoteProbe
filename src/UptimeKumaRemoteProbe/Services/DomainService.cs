@@ -37,7 +37,7 @@ public class DomainService
             daysToExpire = expires.Days;
             closeToExpire = daysToExpire < 30;
 
-            _logger.LogInformation("Domain: {endpoint.Destination} expires: {domain.Expires}", endpoint.Domain, domain.Expires);
+            _logger.LogInformation("Domain: {domain} expires: {expirationDate}", endpoint.Domain, domain.Expires);
         }
         catch
         {

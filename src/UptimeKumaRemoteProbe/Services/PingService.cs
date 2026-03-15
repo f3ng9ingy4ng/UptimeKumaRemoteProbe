@@ -1,4 +1,4 @@
-﻿namespace UptimeKumaRemoteProbe.Services;
+namespace UptimeKumaRemoteProbe.Services;
 
 public class PingService
 {
@@ -13,22 +13,35 @@ public class PingService
 
     public async Task CheckPingAsync(Endpoint endpoint)
     {
-        Ping ping = new();
-        PingReply pingReply = null;
+        var destinations = endpoint.Destinations;
 
-        try
+        bool anySuccess = false;
+        long roundtripTime = 0;
+
+        foreach (var destination in destinations)
         {
-            pingReply = ping.Send(endpoint.Destination, endpoint.Timeout);
-        }
-        catch
-        {
-            // Ignore
+            using Ping ping = new();
+            try
+            {
+                var pingReply = ping.Send(destination, endpoint.Timeout);
+                _logger.LogInformation("Ping: {destination} {status}", destination, pingReply?.Status);
+
+                if (pingReply?.Status == IPStatus.Success)
+                {
+                    anySuccess = true;
+                    roundtripTime = pingReply.RoundtripTime;
+                    break;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error pinging {destination}", destination);
+            }
         }
 
-        if (pingReply?.Status == IPStatus.Success)
+        if (anySuccess)
         {
-            await _pushService.PushAsync(endpoint.PushUri, pingReply.RoundtripTime);
+            await _pushService.PushAsync(endpoint.PushUri, roundtripTime);
         }
-        _logger.LogInformation("Ping: {pingReply.Address} {pingReply.Status}", pingReply?.Address, pingReply?.Status);
     }
 }

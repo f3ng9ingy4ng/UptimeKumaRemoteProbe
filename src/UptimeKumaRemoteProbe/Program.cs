@@ -51,6 +51,7 @@ builder.Services.Configure<HealthCheckPublisherOptions>(options =>
     options.Delay = TimeSpan.FromSeconds(5);
     options.Period = TimeSpan.FromSeconds(20);
 });
+builder.Services.Configure<Configurations>(builder.Configuration.GetSection(nameof(Configurations)));
 builder.Services.AddSingleton<VersionService>();
 builder.Services.AddSingleton<AppSettings>();
 

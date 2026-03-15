@@ -15,46 +15,56 @@ public class CertificateService
 
     public async Task CheckCertificateAsync(Endpoint endpoint)
     {
-        DateTime notAfter = DateTime.UtcNow;
+        var destinations = endpoint.Destinations;
 
-        var httpClient = _httpClientFactory.CreateClient("CertificateCheck");
+        bool anySuccess = false;
+        int remainingDays = 0;
 
-        try
+        foreach (var destination in destinations)
         {
-            using var request = new HttpRequestMessage(new HttpMethod(endpoint.Method ?? "Head"), endpoint.Destination);
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            var result = await httpClient.SendAsync(request, cts.Token);
-            
-            // The ServerCertificateCustomValidationCallback will populate notAfter for us.
-            // But since HttpClientFactory manages handlers and caches them, we can't cleanly extract cert info per-request 
-            // from a shared handler without race conditions. We need a transient handler for this specific use-case or
-            // read cert details directly from the returned HttpResponseMessage.
-            // .NET 6+ doesn't easily expose the ServerCertificate from HttpResponseMessage though.
-            
-            // To be entirely safe and KISS while getting cert info without connection leaks:
-            using var handler = new HttpClientHandler
+            DateTime notAfter = DateTime.UtcNow;
+            try
             {
-                ServerCertificateCustomValidationCallback = (req, cert, chain, policyErrors) =>
+                using var request = new HttpRequestMessage(new HttpMethod(endpoint.Method ?? "Head"), destination);
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                
+                using var handler = new HttpClientHandler
                 {
-                    notAfter = cert.NotAfter;
-                    return true;
-                }
-            };
-            using var tempClient = new HttpClient(handler);
-            var result2 = await tempClient.SendAsync(request, cts.Token);
+                    ServerCertificateCustomValidationCallback = (req, cert, chain, policyErrors) =>
+                    {
+                        if (cert != null)
+                        {
+                            notAfter = cert.NotAfter;
+                        }
+                        return true;
+                    }
+                };
 
-            if (notAfter >= DateTime.UtcNow.AddDays(endpoint.CertificateExpiration))
-            {
-                await _pushService.PushAsync(endpoint.PushUri, (notAfter - DateTime.UtcNow).Days);
-                _logger.LogInformation("Certificate: {endpoint.Destination} {result.StatusCode}",
-                    endpoint.Destination, result.StatusCode);
-                return;
+                using var tempClient = new HttpClient(handler);
+                var result = await tempClient.SendAsync(request, cts.Token);
+
+                _logger.LogInformation("Certificate: {destination} status: {statusCode}", destination, result.StatusCode);
+
+                if (notAfter >= DateTime.UtcNow.AddDays(endpoint.CertificateExpiration))
+                {
+                    anySuccess = true;
+                    remainingDays = (notAfter - DateTime.UtcNow).Days;
+                    break;
+                }
+                else
+                {
+                    _logger.LogWarning("Certificate for {destination} expiration date: {notAfter} is too close or expired.", destination, notAfter);
+                }
             }
-            _logger.LogWarning("Certificate: {endpoint.Destination} expiration date: {notAfter}", endpoint.Destination, notAfter);
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error trying to get certificate for {destination}", destination);
+            }
         }
-        catch
+
+        if (anySuccess)
         {
-            _logger.LogError("Error trying get {endpoint.Destination}", endpoint.Destination);
+            await _pushService.PushAsync(endpoint.PushUri, remainingDays);
         }
     }
 }

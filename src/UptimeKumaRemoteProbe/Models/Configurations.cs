@@ -1,4 +1,4 @@
-﻿namespace UptimeKumaRemoteProbe.Models;
+namespace UptimeKumaRemoteProbe.Models;
 
 public class Configurations
 {
@@ -12,13 +12,16 @@ public class Configurations
     public int Delay { get; set; }
     public string WhoisApiUrl { get; set; }
     public string WhoisApiToken { get; set; }
+    public string ApiDomain { get; set; }
+    public string ApiSecurePrefix { get; set; }
+    public string DeviceId { get; set; }
 }
 
 public class Endpoint
 {
     public string Type { get; set; }
     public Uri PushUri { get; set; }
-    public string Destination { get; set; }
+    public List<string> Destinations { get; set; } = new();
     public int Port { get; set; }
     public string Method { get; set; }
     public string Keyword { get; set; }
