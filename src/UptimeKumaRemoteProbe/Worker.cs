@@ -13,12 +13,14 @@ public class Worker : BackgroundService
     private readonly AppSettings _appSettings;
     private readonly DomainService _domainService;
     private readonly VersionService _versionService;
+    private readonly RealityService _realityService;
+    private readonly IV2BoardService _v2BoardService;
     private static DateOnly lastDailyExecution;
     private long _loopCount = 0;
 
     public Worker(ILogger<Worker> logger, IConfiguration configuration, AppSettings appSettings, PingService pingService, HttpService httpService,
         TcpService tcpService, CertificateService certificateService, DbService dbService, MonitorsService monitorsService,
-        DomainService domainService, VersionService versionService)
+        DomainService domainService, VersionService versionService, RealityService realityService, IV2BoardService v2BoardService)
     {
         _logger = logger;
         _configurations = configuration.GetSection(nameof(Configurations)).Get<Configurations>();
@@ -31,6 +33,8 @@ public class Worker : BackgroundService
         _monitorsService = monitorsService;
         _domainService = domainService;
         _versionService = versionService;
+        _realityService = realityService;
+        _v2BoardService = v2BoardService;
     }
 
     protected async override Task ExecuteAsync(CancellationToken stoppingToken)
@@ -117,17 +121,52 @@ public class Worker : BackgroundService
 
             if (monitor.Active && monitor.Maintenance is false && monitor.Type == "push" && probe)
             {
+                var type = monitor.Tags.Where(w => w.Name == "Type").Select(s => s.Value).FirstOrDefault();
+                var destinations = monitor.Tags.Where(w => w.Name == "Address").Select(s => s.Value).ToList();
+                
+                // V2Board Reality logic
+                var v2boardApi = monitor.Tags.Where(w => w.Name == "V2Board_API").Select(s => s.Value).FirstOrDefault();
+                if (!string.IsNullOrEmpty(v2boardApi))
+                {
+                    type = "Reality";
+                    var jwt = monitor.Tags.Where(w => w.Name == "V2Board_JWT").Select(s => s.Value).FirstOrDefault();
+                    var nodeTag = monitor.Tags.Where(w => w.Name == "V2Board_NodeTag").Select(s => s.Value).FirstOrDefault();
+                    
+                    try
+                    {
+                        var nodes = _v2BoardService.GetNodesAsync(v2boardApi, jwt, nodeTag).GetAwaiter().GetResult();
+                        
+                        // Filter by Probe region matching (ProbeName)
+                        // If node has tags, it must match ProbeName. If no tags, monitor everywhere.
+                        var matchingNodes = nodes.Where(n => n.Tags.Count == 0 || n.Tags.Contains(_appSettings.ProbeName, StringComparer.OrdinalIgnoreCase)).ToList();
+                        
+                        if (matchingNodes.Any())
+                        {
+                            destinations = matchingNodes.Select(n => $"{n.Host}:{n.Port}").ToList();
+                        }
+                        else
+                        {
+                            _logger.LogDebug("No matching Reality nodes found for Probe: {probe}", _appSettings.ProbeName);
+                            continue; // Skip this monitor if no nodes match the probe
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error fetching Reality nodes for monitor {name}", monitor.Name);
+                    }
+                }
+
                 var endpoint = new Endpoint
                 {
-                    Type = monitor.Tags.Where(w => w.Name == "Type").Select(s => s.Value).First(),
-                    Destinations = monitor.Tags.Where(w => w.Name == "Address").Select(s => s.Value).ToList(),
+                    Type = type,
+                    Destinations = destinations,
                     Timeout = int.Parse(monitor.Tags.Where(w => w.Name == "Timeout").Select(s => s.Value).FirstOrDefault() ?? "1000"),
                     PushUri = new Uri($"{_appSettings.Url}api/push/{monitor.PushToken}?status=up&msg=OK_From_{_appSettings.ProbeName}&ping="),
-                    Keyword = monitor.Tags.Where(w => w.Name == "Keyword").Select(s => s.Value).FirstOrDefault() ?? string.Empty,
-                    Method = monitor.Tags.Where(w => w.Name == "Method").Select(s => s.Value).FirstOrDefault(),
+                    Keyword = monitor.Tags.Where(w => w.Name == "V2Board_NodeTag").Select(s => s.Value).FirstOrDefault() ?? string.Empty, // Reuse Keyword for NodeTag storage
+                    Method = monitor.Tags.Where(w => w.Name == "V2Board_JWT").Select(s => s.Value).FirstOrDefault(), // Reuse Method for JWT
                     Brand = monitor.Tags.Where(w => w.Name == "Brand").Select(s => s.Value).FirstOrDefault() ?? string.Empty,
                     Port = int.Parse(monitor.Tags.Where(w => w.Name == "Port").Select(s => s.Value).FirstOrDefault() ?? "0"),
-                    Domain = monitor.Tags.Where(w => w.Name == "Domain").Select(s => s.Value).FirstOrDefault() ?? string.Empty,
+                    Domain = v2boardApi ?? monitor.Tags.Where(w => w.Name == "Domain").Select(s => s.Value).FirstOrDefault() ?? string.Empty, // Reuse Domain for V2Board API URL if reality
                     CertificateExpiration = int.Parse(monitor.Tags.Where(w => w.Name == "CertificateExpiration").Select(s => s.Value).FirstOrDefault() ?? "3"),
                     IgnoreSSL = bool.Parse(monitor.Tags.Where(w => w.Name == "IgnoreSSL").Select(s => s.Value).FirstOrDefault() ?? "False")
                 };
@@ -164,6 +203,9 @@ public class Worker : BackgroundService
                         break;
                     case "Tcp":
                         await _tcpService.CheckTcpAsync(item);
+                        break;
+                    case "Reality":
+                        await _realityService.CheckRealityAsync(item);
                         break;
                     case "Certificate":
                         await _certificateService.CheckCertificateAsync(item);

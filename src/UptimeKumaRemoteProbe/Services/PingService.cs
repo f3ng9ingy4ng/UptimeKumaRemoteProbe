@@ -11,6 +11,22 @@ public class PingService
         _pushService = pushService;
     }
 
+    public async Task<bool> CheckPingOnlyAsync(string destination, int timeout)
+    {
+        using Ping ping = new();
+        try
+        {
+            var pingReply = ping.Send(destination, timeout);
+            _logger.LogInformation("PingOnly: {destination} {status}", destination, pingReply?.Status);
+            return pingReply?.Status == IPStatus.Success;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error pinging {destination}", destination);
+            return false;
+        }
+    }
+
     public async Task CheckPingAsync(Endpoint endpoint)
     {
         var destinations = endpoint.Destinations;
