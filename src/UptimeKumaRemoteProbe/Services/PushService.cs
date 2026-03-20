@@ -11,14 +11,15 @@ public class PushService
         _httpClientFactory = httpClientFactory;
     }
 
-    public async Task PushAsync(Uri uri, long elapsedMilliseconds)
+    public async Task PushAsync(Uri uri, long? elapsedMilliseconds = null)
     {
         try
         {
             var httpClient = _httpClientFactory.CreateClient();
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-            using var response = await httpClient.GetAsync($"{uri}{elapsedMilliseconds}", cts.Token);
-            _logger.LogDebug("Push: {uri} ({ms}ms)", uri, elapsedMilliseconds);
+            var finalUri = elapsedMilliseconds.HasValue ? $"{uri}{elapsedMilliseconds}" : uri.ToString();
+            using var response = await httpClient.GetAsync(finalUri, cts.Token);
+            _logger.LogDebug("Push: {uri}", finalUri);
         }
         catch (OperationCanceledException)
         {

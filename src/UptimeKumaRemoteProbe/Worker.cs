@@ -121,68 +121,30 @@ public class Worker : BackgroundService
 
             if (monitor.Active && monitor.Maintenance is false && monitor.Type == "push" && probe)
             {
-                var type = monitor.Tags.Where(w => w.Name == "Type").Select(s => s.Value).FirstOrDefault();
                 var destinations = monitor.Tags.Where(w => w.Name == "Address").Select(s => s.Value).ToList();
                 
-                // V2Board Reality logic
-                var v2boardApi = monitor.Tags.Where(w => w.Name == "V2Board_API").Select(s => s.Value).FirstOrDefault();
-                var securePrefix = monitor.Tags.Where(w => w.Name == "V2Board_SecurePrefix").Select(s => s.Value).FirstOrDefault() ?? _configurations.ApiSecurePrefix;
-                var deviceId = monitor.Tags.Where(w => w.Name == "V2Board_DeviceId").Select(s => s.Value).FirstOrDefault() ?? _configurations.DeviceId;
-
-                if (!string.IsNullOrEmpty(v2boardApi))
-                {
-                    type = "Reality";
-                    var jwt = monitor.Tags.Where(w => w.Name == "V2Board_JWT").Select(s => s.Value).FirstOrDefault();
-                    var nodeTag = monitor.Tags.Where(w => w.Name == "V2Board_NodeTag").Select(s => s.Value).FirstOrDefault();
-                    
-                    try
-                    {
-                        var nodes = _v2BoardService.GetNodesAsync(v2boardApi, jwt, securePrefix, nodeTag).GetAwaiter().GetResult();
-                        
-                        // Filter by Region matching:
-                        // Only check if node has a tag starting with "region:"
-                        // If "region:hz" exists, ProbeName must be "hz".
-                        // If no "region:" tag, all probes monitor it.
-                        var matchingNodes = nodes.Where(n => 
-                        {
-                            var regionTag = n.Tags.FirstOrDefault(t => t.StartsWith("region:", StringComparison.OrdinalIgnoreCase));
-                            if (string.IsNullOrEmpty(regionTag)) return true;
-                            
-                            var regionValue = regionTag.Split(':').LastOrDefault()?.Trim();
-                            return string.Equals(regionValue, _appSettings.ProbeName, StringComparison.OrdinalIgnoreCase);
-                        }).ToList();
-                        
-                        if (matchingNodes.Any())
-                        {
-                            destinations = matchingNodes.Select(n => $"{n.Host}:{n.Port}").ToList();
-                        }
-                        else
-                        {
-                            _logger.LogDebug("No matching Reality nodes found for Probe: {probe}", _appSettings.ProbeName);
-                            continue; // Skip this monitor if no nodes match the probe
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error fetching Reality nodes for monitor {name}", monitor.Name);
-                    }
-                }
+                // V2Board metadata
+                var v2boardApi = monitor.Tags.FirstOrDefault(t => t.Name == "V2Board_API")?.Value;
+                var jwt = monitor.Tags.FirstOrDefault(t => t.Name == "V2Board_JWT")?.Value;
+                var nodeTag = monitor.Tags.FirstOrDefault(t => t.Name == "V2Board_NodeTag")?.Value;
+                var securePrefix = monitor.Tags.FirstOrDefault(t => t.Name == "V2Board_SecurePrefix")?.Value ?? _configurations.ApiSecurePrefix;
+                var deviceId = monitor.Tags.FirstOrDefault(t => t.Name == "V2Board_DeviceId")?.Value ?? _configurations.DeviceId;
 
                 var endpoint = new Endpoint
                 {
-                    Type = type,
+                    Type = monitor.Tags.FirstOrDefault(t => t.Name == "Type")?.Value,
                     Destinations = destinations,
-                    Timeout = int.Parse(monitor.Tags.Where(w => w.Name == "Timeout").Select(s => s.Value).FirstOrDefault() ?? "1000"),
+                    Timeout = int.Parse(monitor.Tags.FirstOrDefault(t => t.Name == "Timeout")?.Value ?? "1000"),
                     PushUri = new Uri($"{_appSettings.Url}api/push/{monitor.PushToken}?status=up&msg=OK_From_{_appSettings.ProbeName}&ping="),
-                    Keyword = monitor.Tags.Where(w => w.Name == "V2Board_NodeTag").Select(s => s.Value).FirstOrDefault() ?? string.Empty, // Reuse Keyword for NodeTag storage
-                    Method = monitor.Tags.Where(w => w.Name == "V2Board_JWT").Select(s => s.Value).FirstOrDefault(), // Reuse Method for JWT
-                    Brand = monitor.Tags.Where(w => w.Name == "Brand").Select(s => s.Value).FirstOrDefault() ?? string.Empty,
-                    Port = int.Parse(monitor.Tags.Where(w => w.Name == "Port").Select(s => s.Value).FirstOrDefault() ?? "0"),
-                    Domain = v2boardApi ?? monitor.Tags.Where(w => w.Name == "Domain").Select(s => s.Value).FirstOrDefault() ?? string.Empty, // Reuse Domain for V2Board API URL if reality
+                    Keyword = nodeTag ?? string.Empty, // Used for V2Board NodeTag
+                    Method = jwt, // Used for V2Board JWT
+                    Brand = monitor.Tags.FirstOrDefault(t => t.Name == "Brand")?.Value ?? string.Empty,
+                    Port = int.Parse(monitor.Tags.FirstOrDefault(t => t.Name == "Port")?.Value ?? "0"),
+                    Domain = v2boardApi ?? monitor.Tags.FirstOrDefault(t => t.Name == "Domain")?.Value ?? string.Empty,
                     SecurePrefix = securePrefix,
                     DeviceId = deviceId,
-                    CertificateExpiration = int.Parse(monitor.Tags.Where(w => w.Name == "CertificateExpiration").Select(s => s.Value).FirstOrDefault() ?? "3"),
-                    IgnoreSSL = bool.Parse(monitor.Tags.Where(w => w.Name == "IgnoreSSL").Select(s => s.Value).FirstOrDefault() ?? "False")
+                    CertificateExpiration = int.Parse(monitor.Tags.FirstOrDefault(t => t.Name == "CertificateExpiration")?.Value ?? "3"),
+                    IgnoreSSL = bool.Parse(monitor.Tags.FirstOrDefault(t => t.Name == "IgnoreSSL")?.Value ?? "False")
                 };
                 endpoints.Add(endpoint);
             }
