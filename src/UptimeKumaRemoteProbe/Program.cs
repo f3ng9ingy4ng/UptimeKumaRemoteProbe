@@ -39,10 +39,8 @@ builder.Services.AddSingleton<DbService>();
 builder.Services.AddSingleton<CertificateService>();
 builder.Services.AddSingleton<MonitorsService>();
 builder.Services.AddSingleton<DomainService>();
-builder.Services.AddSingleton<IV2BoardService, V2BoardService>();
+builder.Services.AddHttpClient<IV2BoardService, V2BoardService>();
 builder.Services.AddSingleton<RealityService>();
-builder.Services.AddHttpClient<RealityService>(); // RealityService uses HttpClient via V2BoardService
-builder.Services.AddHttpClient<V2BoardService>();
 builder.Services.AddHostedService<Worker>().Configure<HostOptions>(options =>
 {
     options.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.StopHost;

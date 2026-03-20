@@ -60,7 +60,7 @@ public class RealityService
                 
                 // Switch port
                 int nextPort = new Random().Next(10000, 65535);
-                await _v2BoardService.UpdatePortAsync(endpoint.Domain, endpoint.Keyword, host, port, nextPort);
+                await _v2BoardService.UpdatePortAsync(endpoint.Domain, endpoint.Method, endpoint.SecurePrefix, endpoint.DeviceId, host, port, nextPort);
             }
             else
             {

@@ -1,5 +1,7 @@
 namespace UptimeKumaRemoteProbe.Services;
 
+using System.Web;
+
 public class V2BoardService : IV2BoardService
 {
     private readonly ILogger<V2BoardService> _logger;
@@ -13,52 +15,75 @@ public class V2BoardService : IV2BoardService
         _configurations = configurations.Value;
     }
 
-    public async Task<List<V2BoardNode>> GetNodesAsync(string apiUrl, string jwt, string tagFilter)
+    public async Task<List<V2BoardNode>> GetNodesAsync(string apiUrl, string jwt, string securePrefix, string tagFilter)
     {
+        if (string.IsNullOrEmpty(apiUrl))
+        {
+            _logger.LogError("apiUrl is missing. Cannot fetch nodes.");
+            return new List<V2BoardNode>();
+        }
+
+        if (string.IsNullOrEmpty(securePrefix))
+        {
+            _logger.LogError("securePrefix is missing! Construction of V2Board API URL will fail. Please set V2Board_SecurePrefix tag or ApiSecurePrefix in config.");
+            return new List<V2BoardNode>();
+        }
+
         try
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, $"{apiUrl.TrimEnd('/')}/api/v1/admin/server/v2ray/getNodes");
+            // Construct URL: /api/v1/{securePrefix}/server/stats?show=1&tag={tagFilter}
+            var baseUrl = $"{apiUrl.TrimEnd('/')}/api/v1/{securePrefix}/server/stats";
+            var uriBuilder = new UriBuilder(baseUrl);
+            var query = HttpUtility.ParseQueryString(uriBuilder.Query);
+            query["show"] = "1";
+            if (!string.IsNullOrEmpty(tagFilter))
+            {
+                query["tag"] = tagFilter;
+            }
+            uriBuilder.Query = query.ToString();
+
+            // UriBuilder might add default ports (80/443), sometimes V2Board is sensitive. 
+            // Let's use the UriBuilder's Uri directly but be aware.
+            var finalUrl = uriBuilder.Uri.ToString();
+            _logger.LogInformation("V2Board Request: GET {url}", finalUrl);
+
+            var request = new HttpRequestMessage(HttpMethod.Get, finalUrl);
             request.Headers.Add("Authorization", jwt);
 
             var response = await _httpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+                _logger.LogError("V2Board API Error: {status} for {url}. Response: {body}", response.StatusCode, finalUrl, errorBody);
+                return new List<V2BoardNode>();
+            }
 
             var content = await response.Content.ReadAsStringAsync();
             var result = JsonSerializer.Deserialize<V2BoardResponse<List<V2BoardNode>>>(content);
 
             var nodes = result?.Data ?? new List<V2BoardNode>();
-
-            if (!string.IsNullOrEmpty(tagFilter))
-            {
-                nodes = nodes.Where(n => n.Tags.Contains(tagFilter, StringComparer.OrdinalIgnoreCase)).ToList();
-            }
-
-            return nodes;
+            return nodes.Where(n => n.Show == 1).ToList();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get nodes from V2Board API: {apiUrl}", apiUrl);
+            _logger.LogError(ex, "Unexpected error fetching nodes from V2Board: {apiUrl}", apiUrl);
             return new List<V2BoardNode>();
         }
     }
 
-    public async Task UpdatePortAsync(string apiUrl, string jwt, string host, int originalPort, int newPort)
+    public async Task UpdatePortAsync(string apiUrl, string jwt, string securePrefix, string deviceId, string host, int originalPort, int newPort)
     {
         try
         {
-            string domain = _configurations.ApiDomain;
-            string securePrefix = _configurations.ApiSecurePrefix;
-            string deviceId = _configurations.DeviceId ?? "abc123";
-
-            if (string.IsNullOrEmpty(domain) || string.IsNullOrEmpty(securePrefix))
+            if (string.IsNullOrEmpty(apiUrl) || string.IsNullOrEmpty(securePrefix))
             {
-                _logger.LogWarning("Missing ApiDomain or ApiSecurePrefix in configurations. Redirecting to manual V2Board update if possible.");
-                // Note: The logic from update_port.sh uses a specific signing mechanism.
+                _logger.LogWarning("Missing apiUrl or securePrefix. Skip update.");
+                return;
             }
 
             string sendDate = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
             string dataStr = $"host={host}&new_port={newPort}&original_port={originalPort}&sendDate={sendDate}";
-            string token = $"jl{deviceId}";
+            string token = $"jl{deviceId ?? "abc123"}";
 
             string secretKey;
             using (var hmac = new HMACSHA256(Encoding.UTF8.GetBytes("1")))
@@ -74,7 +99,7 @@ public class V2BoardService : IV2BoardService
                 sign = BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
             }
 
-            string url = $"https://{domain}/api/v1/{securePrefix}/server/port/update";
+            string url = $"{apiUrl.TrimEnd('/')}/api/v1/{securePrefix}/server/port/update";
 
             var payload = new
             {
@@ -84,7 +109,8 @@ public class V2BoardService : IV2BoardService
             };
 
             var request = new HttpRequestMessage(HttpMethod.Post, url);
-            request.Headers.Add("deviceId", deviceId);
+            request.Headers.Add("Authorization", jwt);
+            request.Headers.Add("deviceId", deviceId ?? "abc123");
             request.Headers.Add("sendDate", sendDate);
             request.Headers.Add("sign", sign);
             request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");

@@ -126,6 +126,9 @@ public class Worker : BackgroundService
                 
                 // V2Board Reality logic
                 var v2boardApi = monitor.Tags.Where(w => w.Name == "V2Board_API").Select(s => s.Value).FirstOrDefault();
+                var securePrefix = monitor.Tags.Where(w => w.Name == "V2Board_SecurePrefix").Select(s => s.Value).FirstOrDefault() ?? _configurations.ApiSecurePrefix;
+                var deviceId = monitor.Tags.Where(w => w.Name == "V2Board_DeviceId").Select(s => s.Value).FirstOrDefault() ?? _configurations.DeviceId;
+
                 if (!string.IsNullOrEmpty(v2boardApi))
                 {
                     type = "Reality";
@@ -134,11 +137,20 @@ public class Worker : BackgroundService
                     
                     try
                     {
-                        var nodes = _v2BoardService.GetNodesAsync(v2boardApi, jwt, nodeTag).GetAwaiter().GetResult();
+                        var nodes = _v2BoardService.GetNodesAsync(v2boardApi, jwt, securePrefix, nodeTag).GetAwaiter().GetResult();
                         
-                        // Filter by Probe region matching (ProbeName)
-                        // If node has tags, it must match ProbeName. If no tags, monitor everywhere.
-                        var matchingNodes = nodes.Where(n => n.Tags.Count == 0 || n.Tags.Contains(_appSettings.ProbeName, StringComparer.OrdinalIgnoreCase)).ToList();
+                        // Filter by Region matching:
+                        // Only check if node has a tag starting with "region:"
+                        // If "region:hz" exists, ProbeName must be "hz".
+                        // If no "region:" tag, all probes monitor it.
+                        var matchingNodes = nodes.Where(n => 
+                        {
+                            var regionTag = n.Tags.FirstOrDefault(t => t.StartsWith("region:", StringComparison.OrdinalIgnoreCase));
+                            if (string.IsNullOrEmpty(regionTag)) return true;
+                            
+                            var regionValue = regionTag.Split(':').LastOrDefault()?.Trim();
+                            return string.Equals(regionValue, _appSettings.ProbeName, StringComparison.OrdinalIgnoreCase);
+                        }).ToList();
                         
                         if (matchingNodes.Any())
                         {
@@ -167,6 +179,8 @@ public class Worker : BackgroundService
                     Brand = monitor.Tags.Where(w => w.Name == "Brand").Select(s => s.Value).FirstOrDefault() ?? string.Empty,
                     Port = int.Parse(monitor.Tags.Where(w => w.Name == "Port").Select(s => s.Value).FirstOrDefault() ?? "0"),
                     Domain = v2boardApi ?? monitor.Tags.Where(w => w.Name == "Domain").Select(s => s.Value).FirstOrDefault() ?? string.Empty, // Reuse Domain for V2Board API URL if reality
+                    SecurePrefix = securePrefix,
+                    DeviceId = deviceId,
                     CertificateExpiration = int.Parse(monitor.Tags.Where(w => w.Name == "CertificateExpiration").Select(s => s.Value).FirstOrDefault() ?? "3"),
                     IgnoreSSL = bool.Parse(monitor.Tags.Where(w => w.Name == "IgnoreSSL").Select(s => s.Value).FirstOrDefault() ?? "False")
                 };

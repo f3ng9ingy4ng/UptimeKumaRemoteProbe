@@ -31,6 +31,8 @@ public class Endpoint
     public string ConnectionString { get; set; }
     public string Brand { get; set; }
     public string Domain { get; set; }
+    public string SecurePrefix { get; set; }
+    public string DeviceId { get; set; }
 }
 
 public class ConnectionStrings
