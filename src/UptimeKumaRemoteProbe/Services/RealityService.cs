@@ -27,6 +27,7 @@ public class RealityService
     public async Task CheckRealityAsync(Endpoint endpoint)
     {
         var stopwatch = Stopwatch.StartNew();
+        var baseUrl = endpoint.PushUri.GetLeftPart(UriPartial.Path);
         var results = new List<string>();
         var switchLogs = new List<string>();
         var blockedNodes = new List<string>();
@@ -50,6 +51,12 @@ public class RealityService
         if (!matchingNodes.Any())
         {
             _logger.LogWarning("Reality: No nodes matched for Probe {probe} and Tag {tag}", _appSettings.ProbeName, endpoint.Keyword);
+            
+            // Push UP even if no nodes found (per user request)
+            baseUrl = endpoint.PushUri.GetLeftPart(UriPartial.Path);
+            var msg = Uri.EscapeDataString($"No nodes found for tag: {endpoint.Keyword}");
+            var noNodesUrl = $"{baseUrl}?status=up&msg={msg}&ping=0";
+            await _pushService.PushAsync(new Uri(noNodesUrl), null);
             return;
         }
 
@@ -116,7 +123,7 @@ public class RealityService
 
         // Separate msg and ping parameters
         // Example base: http://kuma/api/push/token
-        var baseUrl = endpoint.PushUri.GetLeftPart(UriPartial.Path);
+        baseUrl = endpoint.PushUri.GetLeftPart(UriPartial.Path);
         var finalPushUrl = $"{baseUrl}?status={status}&msg={Uri.EscapeDataString(message)}&ping={maxMs}";
         
         await _pushService.PushAsync(new Uri(finalPushUrl), null);
