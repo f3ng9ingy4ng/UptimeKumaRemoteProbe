@@ -1,5 +1,8 @@
 namespace UptimeKumaRemoteProbe.Services;
 
+using SocketIOClient;
+using SocketIOClient.Common.Messages;
+
 public class MonitorsService
 {
     private readonly ILogger<MonitorsService> _logger;
@@ -19,7 +22,8 @@ public class MonitorsService
             socket = new SocketIOClient.SocketIO(new Uri(_appSettings.Url), new SocketIOClient.SocketIOOptions
             {
                 ReconnectionAttempts = 3,
-                ConnectionTimeout = TimeSpan.FromSeconds(15)
+                ConnectionTimeout = TimeSpan.FromSeconds(15),
+                Transport = SocketIOClient.Common.TransportProtocol.WebSocket
             });
 
             var data = new
