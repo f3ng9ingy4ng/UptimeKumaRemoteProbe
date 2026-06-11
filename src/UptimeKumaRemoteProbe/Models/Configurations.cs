@@ -33,6 +33,7 @@ public class Endpoint
     public string Domain { get; set; }
     public string SecurePrefix { get; set; }
     public string DeviceId { get; set; }
+    public bool AutoSwitchPort { get; set; } = true;
 }
 
 public class ConnectionStrings

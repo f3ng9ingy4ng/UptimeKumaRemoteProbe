@@ -83,13 +83,29 @@ public class RealityService
 
             if (pingSuccess)
             {
-                // Port Blocked -> Update
-                _logger.LogWarning("Reality: Port Blocked on {name}! Attempting update...", node.Name);
-                int nextPort = new Random().Next(10000, 65535);
-                await _v2BoardService.UpdatePortAsync(endpoint.Domain, endpoint.Method, endpoint.SecurePrefix, endpoint.DeviceId, host, port, nextPort);
-                
-                switchLogs.Add($"{node.Name}: {port}->{nextPort}");
-                results.Add($"{node.Name}: Port Switched");
+                // Check if the specific node has a tag disabling auto-switch
+                bool nodeAllowsSwitch = !node.Tags.Any(t => string.Equals(t, "no-auto-switch", StringComparison.OrdinalIgnoreCase));
+
+                if (endpoint.AutoSwitchPort && nodeAllowsSwitch)
+                {
+                    // Port Blocked -> Update
+                    _logger.LogWarning("Reality: Port Blocked on {name}! Attempting update...", node.Name);
+                    int nextPort = new Random().Next(10000, 65535);
+                    await _v2BoardService.UpdatePortAsync(endpoint.Domain, endpoint.Method, endpoint.SecurePrefix, endpoint.DeviceId, host, port, nextPort);
+                    
+                    switchLogs.Add($"{node.Name}: {port}->{nextPort}");
+                    results.Add($"{node.Name}: Port Switched");
+                }
+                else
+                {
+                    string reason = !endpoint.AutoSwitchPort ? "monitor tag" : "node tag";
+                    _logger.LogWarning("Reality: Port Blocked on {name}! Auto-switch is disabled by {reason}.", node.Name, reason);
+                    results.Add($"{node.Name}: Port Blocked (No Switch)");
+                    // Not adding to blockedNodes because IP is still alive, just the port is blocked.
+                    // Depending on desired behavior, we might want to fail the check or just warn.
+                    // For now, we'll keep it as a warning but not fail the entire check if only ports are blocked
+                    // (since that matches the previous behavior where port switch success = OK).
+                }
             }
             else
             {

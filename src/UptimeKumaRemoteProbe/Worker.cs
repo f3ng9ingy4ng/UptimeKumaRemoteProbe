@@ -130,6 +130,17 @@ public class Worker : BackgroundService
                 var securePrefix = monitor.Tags.FirstOrDefault(t => t.Name == "V2Board_SecurePrefix")?.Value ?? _configurations.ApiSecurePrefix;
                 var deviceId = monitor.Tags.FirstOrDefault(t => t.Name == "V2Board_DeviceId")?.Value ?? _configurations.DeviceId;
 
+                var autoSwitchPortTag = monitor.Tags.FirstOrDefault(t => t.Name == "V2Board_AutoSwitchPort")?.Value;
+                bool autoSwitchPort = true; // default
+                if (!string.IsNullOrEmpty(autoSwitchPortTag) && bool.TryParse(autoSwitchPortTag, out bool parsedAutoSwitchPort))
+                {
+                    autoSwitchPort = parsedAutoSwitchPort;
+                }
+                else if (autoSwitchPortTag == "0" || autoSwitchPortTag?.ToLower() == "false")
+                {
+                    autoSwitchPort = false;
+                }
+
                 var endpoint = new Endpoint
                 {
                     Type = monitor.Tags.FirstOrDefault(t => t.Name == "Type")?.Value,
@@ -144,7 +155,8 @@ public class Worker : BackgroundService
                     SecurePrefix = securePrefix,
                     DeviceId = deviceId,
                     CertificateExpiration = int.Parse(monitor.Tags.FirstOrDefault(t => t.Name == "CertificateExpiration")?.Value ?? "3"),
-                    IgnoreSSL = bool.Parse(monitor.Tags.FirstOrDefault(t => t.Name == "IgnoreSSL")?.Value ?? "False")
+                    IgnoreSSL = bool.Parse(monitor.Tags.FirstOrDefault(t => t.Name == "IgnoreSSL")?.Value ?? "False"),
+                    AutoSwitchPort = autoSwitchPort
                 };
                 endpoints.Add(endpoint);
             }
